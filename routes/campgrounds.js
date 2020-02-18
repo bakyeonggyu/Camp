@@ -71,53 +71,57 @@ router.get("/", function(req, res){
 });
 
 
-//CREATE - add new campground to DB
-router.post("/", middleware.isLoggedIn, upload.single('image'), async function(req, res) {
-  // get data from form and add to campgrounds array
-  var name = req.body.name;
-  var cost = req.body.cost;
-  // var image = req.body.image;
-  var desc = req.body.description;
-  var author = {
-      id: req.user._id,
-      username: req.user.username
-  }  
-  cloudinary.v2.uploader.upload(req.file.path, function(err, result) {
-	  var image = result.secure_url;
-	  var imageId = result.public_id;
-	  geocoder.geocode(req.body.location, async function (err, data) {
-			if (err || !data.length) {
-			  req.flash('error', 'Invalid address');
-			  return res.redirect('back');
-			}
-			var lat = data[0].latitude;
-			var lng = data[0].longitude;
-			var location = data[0].formattedAddress;
-			var newCampground = {name: name, image: image, imageId: imageId, cost: cost, description: desc, author:author, location: location, lat: lat, lng: lng};
-		  
-			try{
-				let campground = await Campground.create(newCampground);
-				let user = await User.findById(req.user._id).populate('followers').exec();
-				let newNotification = {
-					username: req.user.username,
-					campgroundId: campground.id
-				}
-				for(const follower of user.followers){
-					let notification = await Notification.create(newNotification);
-					follower.notifications.push(notification);
-					follower.save();
-				}
-					
-				//redirect back to campgrounds page
-				res.redirect(`/campgrounds/${campground.id}`);
-			} catch(err){
-				req.flash('error', err.message);
-				res.redirect('back');
-			}
-  		});
-	
-	});
-  // eval(pry.it)
+// CREATE - add new campground to DB
+router.post("/", middleware.isLoggedIn, upload.single('image'), async function (req, res) {
+    if (req.file) {
+        // upload file to cloudinary
+        await cloudinary.v2.uploader.upload(req.file.path, function (err, uploadedImage) {
+            if (err) {
+                req.flash("error", "Only image file types are supported");
+                return res.redirect("back");
+            } else {
+                let result = uploadedImage;
+                // assign to campground object
+                req.body.campground.image = result.secure_url;
+                req.body.campground.imageId = result.public_id;
+            }
+        });
+    }
+ 
+    try {
+        // add author object to campground on req.body
+        req.body.campground.author = {
+            id: req.user._id,
+            username: req.user.username
+        };
+        // check if file uploaded
+ 
+        // geocode location
+        let data = await geocoder.geocode(req.body.campground.location);
+        // assign lat and lng and update location with formatted address
+        req.body.campground.lat = data[0].latitude;
+        req.body.campground.lng = data[0].longitude;
+        req.body.campground.location = data[0].formattedAddress;
+        // create campground from updated req.body.campground object
+        let campground = await Campground.create(req.body.campground);
+		let user = await User.findById(req.user._id).populate('followers').exec();
+		let newNotification = {
+			username: req.user.username,
+			campgroundId: campground.id
+		}
+		for(const follower of user.followers){
+			let notification = await Notification.create(newNotification);
+			follower.notifications.push(notification);
+			follower.save();
+		}
+        // redirect to campground show page
+        res.redirect(`/campgrounds/${campground.id}`);
+    } catch (err) {
+        // flash error and redirect to previous page
+        req.flash('error', err.message);
+        res.redirect('back');
+    }
+ 
 });
 
 //NEW - show form to create new campground

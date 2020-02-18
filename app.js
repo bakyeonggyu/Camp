@@ -18,7 +18,7 @@ var express 	= require("express"),
 		reviewRoutes = require("./routes/reviews"),
 		campgroundRoutes = require("./routes/campgrounds"),
 		indexRoutes = require("./routes/index");
-
+console.log(process.env.DATABASEURL);
 var url = process.env.DATABASEURL || "mongodb://localhost:27017/yelp_camp_v11Deployed"
 mongoose.connect(process.env.DATABASEURL, {
 	useNewUrlParser: true,
